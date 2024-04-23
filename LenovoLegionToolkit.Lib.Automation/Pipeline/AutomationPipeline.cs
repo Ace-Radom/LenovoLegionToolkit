@@ -45,7 +45,7 @@ public class AutomationPipeline
 
     public AutomationPipeline(IAutomationPipelineTrigger trigger) => Trigger = trigger;
 
-    internal async Task RunAsync(CancellationToken token = default)
+    public async Task RunAsync(CancellationToken token = default)
     {
         if (token.IsCancellationRequested)
         {

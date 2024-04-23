@@ -13,6 +13,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using LenovoLegionToolkit.Lib;
 using LenovoLegionToolkit.Lib.Automation;
+using LenovoLegionToolkit.Lib.Automation.Utils;
 using LenovoLegionToolkit.Lib.Controllers;
 using LenovoLegionToolkit.Lib.Extensions;
 using LenovoLegionToolkit.Lib.Features;
@@ -69,6 +70,48 @@ public partial class App
         if (Log.Instance.IsTraceEnabled)
             Log.Instance.Trace($"Flags: {flags}");
 
+        if (flags.QuickActionRunName is not null)
+        {
+            IoCContainer.Initialize(
+                new Lib.IoCModule(),
+                new Lib.Automation.IoCModule(),
+                new IoCModule()
+            );
+            AutomationSettings automationSettings = new();
+            var pipelineToRun = automationSettings.Store
+                                                  .Pipelines
+                                                  .Where(p => p.Trigger is null)
+                                                  .FirstOrDefault(p => p.Name == flags.QuickActionRunName);
+            int eCode = 0;
+            if (pipelineToRun == null)
+            {
+                if (Log.Instance.IsTraceEnabled)
+                    Log.Instance.Trace($"Manual automation pipeline \"{flags.QuickActionRunName}\" not found");
+                eCode = 1;
+            }
+            else
+            {
+                if (Log.Instance.IsTraceEnabled)
+                    Log.Instance.Trace($"Manual automation pipeline \"{flags.QuickActionRunName}\" Found");
+
+                try
+                {
+                    await pipelineToRun.DeepCopy().RunAsync();
+
+                    if (Log.Instance.IsTraceEnabled)
+                        Log.Instance.Trace($"Pipeline run finished successfully.");
+                }
+                catch (Exception ex)
+                {
+                    eCode = 1;
+                    if (Log.Instance.IsTraceEnabled)
+                        Log.Instance.Trace($"Pipeline run failed.", ex);
+                }
+            }
+            Application.Current.Shutdown(eCode);
+            return;
+        }
+
         EnsureSingleInstance();
 
         await LocalizationHelper.SetLanguageAsync(true);
@@ -112,7 +155,7 @@ public partial class App
         await InitSpectrumKeyboardControllerAsync();
         await InitGpuOverclockControllerAsync();
         await InitHybridModeAsync();
-        await InitAutomationProcessorAsync();
+        await InitAutomationProcessorAsync(true);
 
         await IoCContainer.Resolve<AIController>().StartIfNeededAsync();
         await IoCContainer.Resolve<HWiNFOIntegration>().StartStopIfNeededAsync();
@@ -361,7 +404,7 @@ public partial class App
         }
     }
 
-    private static async Task InitAutomationProcessorAsync()
+    private static async Task InitAutomationProcessorAsync(bool runOnStartup)
     {
         try
         {
@@ -370,7 +413,8 @@ public partial class App
 
             var automationProcessor = IoCContainer.Resolve<AutomationProcessor>();
             await automationProcessor.InitializeAsync();
-            automationProcessor.RunOnStartup();
+            if (runOnStartup)
+                automationProcessor.RunOnStartup();
         }
         catch (Exception ex)
         {
